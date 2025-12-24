@@ -8,6 +8,5 @@ It demonstrates the basic phases of a compiler including lexical analysis, parsi
 - Java
 - JavaCC
 - Ubuntu
-- Git & GitHub
 
 ##  Project Structure
