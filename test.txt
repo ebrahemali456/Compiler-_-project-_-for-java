@@ -1,0 +1,12 @@
+int x = 2 + 3 * 4;
+int y = x - 5;
+
+if (x > y) {
+    y = y + 1;
+}
+
+for (int i = 0; i < 3; i = i + 1) {
+    x = x + i;
+}
+
+return x;

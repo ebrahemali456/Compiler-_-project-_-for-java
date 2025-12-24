@@ -1,0 +1,337 @@
+// ======================================================
+// JavaCC Compiler with AST (Readable Version)
+// ======================================================
+
+PARSER_BEGIN(MyCompiler)
+
+import java.io.FileInputStream;
+import java.util.*;
+
+
+
+
+public class MyCompiler {
+    public static void main(String[] args) throws Exception {
+        MyCompiler compiler = new MyCompiler(new FileInputStream("test.txt"));
+
+        try {
+            ASTNode ast = compiler.Start();
+            System.out.println("Syntax validation successful");
+            ast.print("");
+            SymbolTable.print();
+
+        } catch (ParseException e) {
+            System.out.println("Syntax Error at line " +
+                    e.currentToken.next.beginLine + ", column " +
+                    e.currentToken.next.beginColumn);
+        }
+    }
+}
+
+PARSER_END(MyCompiler)
+
+
+/***************************************************
+ * TOKENS
+ ***************************************************/
+TOKEN : {
+    < IF: "if" >
+  | < WHILE: "while" >
+  | < FOR: "for" >
+  | < RETURN: "return" >
+  | < INT: "int" >
+
+  | < ASSIGN: "=" >
+
+  | < LT: "<" >
+  | < GT: ">" >
+  | < LE: "<=" >
+  | < GE: ">=" >
+  | < EQ: "==" >
+  | < NE: "!=" >
+
+  | < PLUS: "+" >
+  | < MINUS: "-" >
+  | < MULTIPLY: "*" >
+  | < DIVIDE: "/" >
+
+  | < LBRACE: "{" >
+  | < RBRACE: "}" >
+  | < LPAREN: "(" >
+  | < RPAREN: ")" >
+  | < SEMICOLON: ";" >
+
+  | < NUM: (["0"-"9"])+ >
+  | < ID: (["a"-"z","A"-"Z"]) (["a"-"z","A"-"Z","0"-"9"])* >
+}
+
+SKIP :
+{
+      " "
+    | "\t"
+    | "\n"
+    | "\r"
+    | < "//" (~["\n","\r"])* >
+    | < "/*" (~["*"])* "*" (~["/"] (~["*"])* "*")* "/" >
+}
+
+
+
+
+/***************************************************
+ * START / PROGRAM
+ ***************************************************/
+ASTNode Start() :
+{
+    ASTNode root = new ASTNode("Program");
+    ASTNode stmt;
+}
+{
+    ( stmt = Statement() { root.add(stmt); } )* <EOF>
+    { return root; }
+}
+
+
+/***************************************************
+ * STATEMENT
+ ***************************************************/
+ASTNode Statement() :
+{
+    Token id;
+    ASTNode expr;
+    ASTNode node;
+    ASTNode init;
+    ASTNode cond;
+    ASTNode update;
+}
+{
+<INT> id=<ID> <ASSIGN> expr=Expression() <SEMICOLON>
+{
+    SymbolTable.add(
+        id.image,
+        "int",
+        "global",
+        id.beginLine
+    );
+
+    node = new ASTNode("VarDecl");
+    node.add(new ASTNode("Identifier", id.image));
+    node.add(expr);
+    return node;
+}
+
+|
+    id=<ID> <ASSIGN> expr=Expression() <SEMICOLON>
+    {
+        node = new ASTNode("Assign");
+        node.add(new ASTNode("Identifier", id.image));
+        node.add(expr);
+        return node;
+    }
+|
+    <RETURN> expr=Expression() <SEMICOLON>
+    {
+        node = new ASTNode("Return");
+        node.add(expr);
+        return node;
+    }
+|
+    <IF> <LPAREN> cond=Condition() <RPAREN> node=Block()
+    {
+        ASTNode ifNode = new ASTNode("If");
+        ifNode.add(cond);
+        ifNode.add(node);
+        return ifNode;
+    }
+|
+    <WHILE> <LPAREN> cond=Condition() <RPAREN> node=Block()
+    {
+        ASTNode whileNode = new ASTNode("While");
+        whileNode.add(cond);
+        whileNode.add(node);
+        return whileNode;
+    }
+|
+    <FOR> <LPAREN>
+        init=ForInit() <SEMICOLON>
+        cond=Condition() <SEMICOLON>
+        update=ForUpdate()
+      <RPAREN>
+      node=Block()
+    {
+        ASTNode forNode = new ASTNode("For");
+        forNode.add(init);
+        forNode.add(cond);
+        forNode.add(update);
+        forNode.add(node);
+        return forNode;
+    }
+}
+
+
+/***************************************************
+ * CONDITION
+ ***************************************************/
+ASTNode Condition() :
+{
+    ASTNode left;
+    ASTNode right;
+    Token op;
+}
+{
+    left = Expression()
+    ( op=<GT> | op=<LT> | op=<GE> | op=<LE> | op=<EQ> | op=<NE> )
+    right = Expression()
+    {
+        ASTNode cond = new ASTNode("BinaryOp", op.image);
+        cond.add(left);
+        cond.add(right);
+        return cond;
+    }
+}
+
+
+/***************************************************
+ * BLOCK
+ ***************************************************/
+ASTNode Block() :
+{
+    ASTNode block = new ASTNode("Block");
+    ASTNode s;
+}
+{
+    <LBRACE>
+        ( s=Statement() { block.add(s); } )*
+    <RBRACE>
+    { return block; }
+|
+    s=Statement()
+    {
+        block.add(s);
+        return block;
+    }
+}
+
+
+/***************************************************
+ * FOR INIT
+ ***************************************************/
+ASTNode ForInit() :
+{
+    Token id;
+    ASTNode expr;
+}
+{
+<INT> id=<ID> <ASSIGN> expr=Expression()
+{
+    SymbolTable.add(
+        id.image,
+        "int",
+        "for",
+        id.beginLine
+    );
+
+    ASTNode n = new ASTNode("ForInit");
+    n.add(new ASTNode("Identifier", id.image));
+    n.add(expr);
+    return n;
+}
+
+|
+    id=<ID> <ASSIGN> expr=Expression()
+    {
+        ASTNode n = new ASTNode("ForInit");
+        n.add(new ASTNode("Identifier", id.image));
+        n.add(expr);
+        return n;
+    }
+}
+
+
+/***************************************************
+ * FOR UPDATE
+ ***************************************************/
+ASTNode ForUpdate() :
+{
+    Token id;
+    ASTNode expr;
+}
+{
+    id=<ID> <ASSIGN> expr=Expression()
+    {
+        ASTNode n = new ASTNode("ForUpdate");
+        n.add(new ASTNode("Identifier", id.image));
+        n.add(expr);
+        return n;
+    }
+}
+
+
+/***************************************************
+ * FACTOR
+ ***************************************************/
+ASTNode Factor() :
+{
+    Token t;
+    ASTNode e;
+}
+{
+    t=<NUM>
+    { return new ASTNode("Number", t.image); }
+|
+    t=<ID>
+    { return new ASTNode("Identifier", t.image); }
+|
+    <LPAREN> e=Expression() <RPAREN>
+    { return e; }
+}
+
+
+/***************************************************
+ * TERM  (* and /)
+ ***************************************************/
+ASTNode Term() :
+{
+    ASTNode left;
+    ASTNode right;
+    Token op;
+}
+{
+    left = Factor()
+    (
+        ( op=<MULTIPLY> | op=<DIVIDE> )
+        right = Factor()
+        {
+            ASTNode bin = new ASTNode("BinaryOp", op.image);
+            bin.add(left);
+            bin.add(right);
+            left = bin;
+        }
+    )*
+    { return left; }
+}
+
+/***************************************************
+ * EXPRESSION (+ and -)
+ ***************************************************/
+ASTNode Expression() :
+{
+    ASTNode left;
+    ASTNode right;
+    Token op;
+    ASTNode bin;
+}
+{
+    left = Term()
+    (
+        ( op=<PLUS> | op=<MINUS> )
+        right = Term()
+        {
+            bin = new ASTNode("BinaryOp", op.image);
+            bin.add(left);
+            bin.add(right);
+            left = bin;
+        }
+    )*
+    { return left; }
+}
